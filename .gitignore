@@ -1,23 +1,28 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.env
+# venvs
 .venv/
 venv/
 
-# IDE
-.vscode/
-.idea/
-
-# OS
+# caches & junk
+__pycache__/
+*.py[cod]
 .DS_Store
 Thumbs.db
+.ipynb_checkpoints/
 
-# Project: keep repo lean
+# local models & offload
+MolmoE-1B-0924-NF4/
 models/
-offload_molmo/
-*.safetensors
-*.bin
+offload/
+.offload/
+
+# HF caches anywhere
+hf_cache/
+.huggingface/
+.cache/
+**/.cache/
+**/huggingface/
+**/modules/transformers_modules/
+
+# keep placeholder files if you add them
+!models/.keep
+!offload/.keep
