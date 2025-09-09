@@ -1,11 +1,11 @@
-# file: nf4_local_bulletproof.py
 import os, time, torch
 from pathlib import Path
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-# ── CONFIG: point at your already-downloaded local NF4 folder ────────────────
 LOCAL_DIR = Path.cwd() / "MolmoE-1B-0924-NF4"  # e.g. C:\Molmo-FYP\MolmoE-1B-0924-NF4
+IMG_PATH = Path("test_images/clock_face.png") # test image from the PC
+PROMPT = "Describe this image briefly."
 
 # Quiet TF spam (optional) and keep torchvision enabled
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -75,9 +75,14 @@ def main():
 
     # 3) Offline test image
     img = Image.new("RGB", (320, 240), "gray")
+    #img = Image.open(IMG_PATH).convert("RGB")
+
+    # Start end-to-end timer 
+    if device.type == "cuda": torch.cuda.synchronize() 
+    overall_time_start = time.perf_counter()
 
     # 4) Preprocess -> move to device -> CAST images to vision dtype
-    batch = processor.process(images=[img], text="Describe this image briefly.")
+    batch = processor.process(images=[img], text = PROMPT)
     batch = move_and_fix_dtypes(batch, device, vision_dtype)
 
     # 5) Manual greedy decode (robust; no .generate* calls)
@@ -98,7 +103,15 @@ def main():
     # 6) Decode only the new tokens
     gen_tokens = batch["input_ids"][0, start_len:]
     text = processor.tokenizer.decode(gen_tokens, skip_special_tokens=True).strip()
+
+    # Stop end-to-end timer 
+    if device.type == "cuda": torch.cuda.synchronize() 
+    overall_time_end = time.perf_counter() 
+
+    overall_time = overall_time_end - overall_time_start
+
     print(">>>", text)
+    print(f"[timing] end-to-end (preprocess + decode + detokenise): {overall_time:.2f} seconds")
 
 if __name__ == "__main__":
     main()
