@@ -3,7 +3,7 @@ sudo ubuntu-drivers autoinstall
 sudo reboot
 
 2. Install Docker Engine and NVIDIA Container Toolkit
-# Docker Engine
+Docker Engine
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 newgrp docker
@@ -43,7 +43,7 @@ docker run --rm -it --gpus all \
 
 
 
-*Deprecated*
+*Deprecated* 
 Create a vritual environment:  
 python -m venv .venv  
 source .venv/bin/activate  # (Windows: .\.venv\Scripts\activate)  
