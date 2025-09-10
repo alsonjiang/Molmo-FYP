@@ -1,26 +1,26 @@
 1. Install NVIDIA driver and reboot
+    
+  sudo ubuntu-drivers autoinstall  
+  sudo reboot  
   
-sudo ubuntu-drivers autoinstall  
-sudo reboot  
+2. Install Docker Engine and NVIDIA Container Toolkit  
   
-3. Install Docker Engine and NVIDIA Container Toolkit
+  *Docker Engine*   
+  curl -fsSL https://get.docker.com | sh  
+  sudo usermod -aG docker $USER  
+  newgrp docker  
   
-*Docker Engine*   
-curl -fsSL https://get.docker.com | sh  
-sudo usermod -aG docker $USER  
-newgrp docker  
-
-*NVIDIA Container Toolkit*  
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -fsSL https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list \
-  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list 
-sudo apt update && sudo apt install -y nvidia-container-toolkit 
-sudo nvidia-ctk runtime configure --runtime=docker 
-sudo systemctl restart docker 
+  *NVIDIA Container Toolkit*  
+  distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+    | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  curl -fsSL https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list \
+    | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list 
+  sudo apt update && sudo apt install -y nvidia-container-toolkit 
+  sudo nvidia-ctk runtime configure --runtime=docker 
+  sudo systemctl restart docker 
  
-Verify GPU: 
+Verify GPU:  
 docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi 
  
 3. Clone this repository  
