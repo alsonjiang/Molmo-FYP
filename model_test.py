@@ -119,3 +119,6 @@ if __name__ == "__main__":
 #expected output:
 #The image displays a solid gray square with no visible content or features. 
 #It appears to be a plain, unadorned gray square without any discernible elements, patterns, or variations in color or texture.
+
+#47s on rtx3060 12gb vram
+#277s on rtx4060 8gb vram 
