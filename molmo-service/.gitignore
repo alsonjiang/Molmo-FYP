@@ -15,6 +15,9 @@ models/
 offload/
 .offload/
 
+# local image folder
+test_images/
+
 # HF caches anywhere
 hf_cache/
 .huggingface/
