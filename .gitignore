@@ -1,0 +1,31 @@
+# venvs
+.venv/
+venv/
+
+# caches & junk
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+
+# local models & offload
+MolmoE-1B-0924-NF4/
+models/
+offload/
+.offload/
+
+# local image folder
+test_images/
+
+# HF caches anywhere
+hf_cache/
+.huggingface/
+.cache/
+**/.cache/
+**/huggingface/
+**/modules/transformers_modules/
+
+# keep placeholder files if you add them
+!models/.keep
+!offload/.keep
