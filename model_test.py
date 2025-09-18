@@ -4,7 +4,7 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModelForCausalLM
 
 LOCAL_DIR = Path.cwd() / "MolmoE-1B-0924-NF4"  # e.g. C:\Molmo-FYP\MolmoE-1B-0924-NF4
-IMG_PATH = Path("test_images/clock_face.png") # test image from the PC
+IMG_PATH = Path("images/clock_face.png") # test image from the PC
 PROMPT = "Describe this image briefly."
 
 # Quiet TF spam (optional) and keep torchvision enabled
@@ -74,7 +74,7 @@ def main():
     print("vision dtype:", vision_dtype)
 
     # 3) Offline test image
-    img = Image.new("RGB", (320, 240), "gray")
+    img = Image.new("RGB", (10, 10), "gray")
     #img = Image.open(IMG_PATH).convert("RGB")
 
     # Start end-to-end timer 

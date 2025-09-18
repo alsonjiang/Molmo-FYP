@@ -15,8 +15,16 @@ models/
 offload/
 .offload/
 
+# offload folder in molmo-service
+molmo-service/offload/
+molmo-service/__pycache__
+
+# yolo weights
+yolo-service/yolo11n.pt
+yolo-service/__pycache__
+
 # local image folder
-test_images/
+images/
 
 # HF caches anywhere
 hf_cache/
@@ -26,6 +34,3 @@ hf_cache/
 **/huggingface/
 **/modules/transformers_modules/
 
-# keep placeholder files if you add them
-!models/.keep
-!offload/.keep

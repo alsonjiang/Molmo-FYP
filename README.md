@@ -1,3 +1,26 @@
+git clone https://github.com/alsonjiang/Molmo-FYP.git   
+cd Molmo-FYP 
+
+python -m venv .venv    
+source .venv/bin/activate  # (Windows: .\.venv\Scripts\activate)
+pip install ir requirements.txt  
+
+1. start molmo-service  
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
+
+2. start yolo-service  
+python -m uvicorn app:app --host 0.0.0.0 --port 9000
+
+3. start main.py  
+set MOLMO_URL=http://localhost:8000/caption
+set YOLO_URL=http://localhost:9000/detect
+python main.py
+
+
+
+
+Dockerised:  
+  
 1. Install NVIDIA driver and reboot
     
   sudo ubuntu-drivers autoinstall  
