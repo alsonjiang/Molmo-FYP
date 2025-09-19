@@ -170,7 +170,6 @@ def main():
             if not persons:
                 continue
 
-
             # Crop best and call Molmo
             best = max(persons, key=lambda d: float(d.get("conf",0)))
             okc, c = crop(frame, best["xyxy"])
@@ -190,7 +189,7 @@ def main():
             text = (molmo.get("caption") or molmo.get("text") or "").strip()
             print(f"[molmo] response: {text}", flush=True)
 
-            # 7) Restart YOLO after a successful Molmo round
+            # Restart YOLO after a successful Molmo round
             restart_yolo()
             time.sleep(0.02)
 
