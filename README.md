@@ -16,6 +16,10 @@ set MOLMO_URL=http://localhost:8000/caption
 set YOLO_URL=http://localhost:9000/detect
 python main.py
 
+To check status of services:  
+curl http://localhost:8000/health  
+curl http://localhost:9000/health
+
 
 
 
