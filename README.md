@@ -3,8 +3,8 @@ git clone https://github.com/alsonjiang/Molmo-FYP.git
 cd Molmo-FYP  
   
 python -m venv .venv    
-source .venv/bin/activate  # (Windows: .\.venv\Scripts\activate)  
-pip install ir requirements.txt  
+source .venv/bin/activate  # (Windows:.\.venv\Scripts\activate)  
+pip install -r requirements.txt  
   
   
 Download Molmo molmo model and smoke test:   
@@ -12,7 +12,9 @@ Download Molmo molmo model and smoke test:
 This creates a folder named MolmoE-1B-0924-NF4 in your project root that stores the model
   
 2. Run model_test.py 
-This tests the model and the working environment
+This tests the model and the working environment  
+#The image displays a solid gray square with no visible content or features.   
+#It appears to be a plain, unadorned gray square without any discernible elements, patterns, or variations in color or texture.  
   
   
 Test actual functionalities:  
