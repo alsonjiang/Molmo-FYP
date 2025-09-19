@@ -1,10 +1,21 @@
+Setup:  
 git clone https://github.com/alsonjiang/Molmo-FYP.git   
 cd Molmo-FYP  
-
+  
 python -m venv .venv    
 source .venv/bin/activate  # (Windows: .\.venv\Scripts\activate)  
 pip install ir requirements.txt  
-
+  
+  
+Download Molmo molmo model and smoke test:   
+1. Run download_model.py
+This creates a folder named MolmoE-1B-0924-NF4 in your project root that stores the model
+  
+2. Run model_test.py 
+This tests the model and the working environment
+  
+  
+Test actual functionalities:  
 1. start molmo-service  
 cd molmo-service  
 python -m uvicorn app:app --host 0.0.0.0 --port 8000  
@@ -25,8 +36,7 @@ curl http://localhost:9000/health
 
 
 
-Dockerised:  
-  
+Dockerised (CURRENTLY OUTDATED):  
 1. Install NVIDIA driver and reboot
     
   sudo ubuntu-drivers autoinstall  
