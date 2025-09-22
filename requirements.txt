@@ -69,8 +69,8 @@ tensorboard-data-server==0.7.2
 tensorflow==2.20.0
 termcolor==3.1.0
 tokenizers==0.22.0
-torch==2.6.0+cu124
-torchvision==0.21.0+cu124
+torch==2.6.0
+torchvision==0.21.0
 tqdm==4.67.1
 transformers==4.56.1
 typing-inspection==0.4.1
