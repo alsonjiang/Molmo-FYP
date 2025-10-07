@@ -105,12 +105,13 @@ def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
     batch = processor.process(images=[img], text=prompt)
     batch = {k: v for k, v in batch.items() if v is not None}
 
+    """
     # ✅ Force pixel path; drop any pre-embedded 'images' keys
     if "pixel_values" in batch:
         batch.pop("images", None)
         batch.pop("image_values", None)
         batch.pop("image", None)
-
+        
     # Now normalize just like before…
     has_image = False
     if "pixel_values" in batch and isinstance(batch["pixel_values"], torch.Tensor):
@@ -118,18 +119,21 @@ def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
         if x.dim() == 3:  # [C,H,W] -> [1,C,H,W]
             x = x.unsqueeze(0)
         batch["pixel_values"] = _move_cast(x)
-        has_image = True
-
+        has_image = True 
     if not has_image:
         raise HTTPException(status_code=422, detail="no pixel_values from processor")
-
+    """
+    batch["images"] = torch.unsqueeze(batch["images"],0)
+    batch["image_input_idx"] = torch.unsqueeze(batch["image_input_idx"],0)
+    batch["image_masks"] = torch.unsqueeze(batch["image_masks"],0)
     # Move non-image tensors; add batch dim for 1D
     for k, v in list(batch.items()):
-        if k == "pixel_values":
-            continue
+        #if k == "pixel_values":
+        #    continue
+        print(f"{k} dimensions: {v.shape}")
         if isinstance(v, torch.Tensor):
             if v.dim() == 1:
-                v = v.unsqueeze(0)
+                v = torch.unsqueeze(v,0)
             batch[k] = v.to(EMBED_DEVICE, non_blocking=True)
 
     # Drop broken caches and return
@@ -137,7 +141,6 @@ def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
         pkv = batch["past_key_values"]
         if pkv is None or (isinstance(pkv, (list, tuple)) and any(x is None for x in pkv)):
             batch.pop("past_key_values", None)
-
     return batch
 
 
