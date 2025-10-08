@@ -146,11 +146,13 @@ def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
 
 def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
     t0 = time.time()
-    with torch.inference_mode():
+        with torch.inference_mode():
         if hasattr(model, "generate_from_batch"):
-            out = model.generate_from_batch(batch, GENCFG, tokenizer=tok, use_cache=False)
+            with torch.autocast(device_type="cuda", enabled=True, dtype=torch.float16):
+                out = model.generate_from_batch(batch, GENCFG, tokenizer=tok, use_cache=False)
         else:
-            out = model.generate(**batch, generation_config=GENCFG, use_cache=False)
+            with torch.autocast(device_type="cuda", enabled=True, dtype=torch.float16):
+                out = model.generate(**batch, generation_config=GENCFG, use_cache=False)
     if timings is not None:
         timings["generate_s"] = time.time() - t0
 
