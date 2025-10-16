@@ -5,12 +5,12 @@ import cv2, requests
 from PIL import Image
 
 # ───────────────────────── Config ─────────────────────────
-PROMPT = 'Describe the person in the image. Answer "None" if there is no person.'
+PROMPT = 'Describe the person only like so: Gender | Shirt Color'
 YOLO_URL  = os.getenv("YOLO_URL",  "http://localhost:9000/detect")
 MOLMO_URL = os.getenv("MOLMO_URL", "http://localhost:8000/caption")
 CAM_INDEX = int(os.getenv("CAM_INDEX", "0"))
 CONF_THR  = float(os.getenv("CONF_THR", "0.35"))
-MOLMO_TIMEOUT_S = float(os.getenv("MOLMO_TIMEOUT_S", "5.0"))
+MOLMO_TIMEOUT_S = float(os.getenv("MOLMO_TIMEOUT_S", "80.0"))
 
 COMPOSE_FILE = os.getenv("COMPOSE_FILE", str(Path(__file__).resolve().parents[1] / "robot-stack" / "docker-compose.yml"))
 DOCKER_COMPOSE = os.getenv("DOCKER_COMPOSE", "docker compose")
@@ -23,6 +23,11 @@ DEDUPE_COOLDOWN = 4.0     # seconds before the same person crop can be sent agai
 MIN_BOX_AREA_FRAC = 0.02  # tiny boxes (e.g., background silhouettes) ignored
 MIN_ASPECT = 0.25         # w/h sanity for a person
 MAX_ASPECT = 1.2
+
+
+# ─────────────── NEW: Label filtering functionality ────────────────
+
+TARGET_LABEL = None  # Will store the target object label to detect
 
 # ─────────────────────── Utilities ────────────────────────
 def draw_boxes(frame_bgr, dets, persons_only=True):
@@ -104,6 +109,150 @@ def start_cmd_reader():
     t.start()
     return q
 
+# ─────────────── NEW: Image processing and label extraction ────────────────
+
+def extract_image_path_from_text(text):
+    """Extract image path from user input text using | as delimiter"""
+    try:
+        # Split by | delimiter and look for image path
+        parts = [part.strip() for part in text.split('|')]
+
+        # Look for file extensions or valid paths
+        for part in parts:
+            # Check if it looks like a file path
+            if any(ext in part.lower() for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']):
+                return part
+            # Check if it's a valid file path
+            if os.path.exists(part):
+                return part
+
+        # If no delimiter found, assume the whole text is the path
+        if os.path.exists(text.strip()):
+            return text.strip()
+
+        return None
+    except Exception as e:
+        print(f"[error] Failed to extract image path: {e}")
+        return None
+
+def load_image_and_extract_label(image_path, session):
+    """Load image from path and extract label using Molmo"""
+    global TARGET_LABEL
+
+    try:
+        # Load and encode image
+        if not os.path.exists(image_path):
+            print(f"[error] Image file not found: {image_path}")
+            return False
+
+        # Load image using OpenCV
+        img = cv2.imread(image_path)
+        if img is None:
+            print(f"[error] Failed to load image: {image_path}")
+            return False
+
+        print(f"[startup] Loaded image: {image_path}")
+
+        # Encode image to base64
+        img_b64 = encode_b64(img, q=90)
+
+        # Call Molmo to extract label
+        label_prompt = "Respond with only the object name if there is a person (eg. 'person')"
+        #label_prompt = "What is the main object in this image? Respond with only the object name (e.g., 'person', 'car', 'dog', etc.)"
+
+        payload = {
+            "image_b64": img_b64, 
+            "prompt": label_prompt
+        }
+
+        print("[startup] Sending image to Molmo for label extraction...")
+        resp = session.post(MOLMO_URL, json=payload, timeout=MOLMO_TIMEOUT_S)
+        resp.raise_for_status()
+
+        extracted_text = (resp.json().get("caption") or resp.json().get("text") or "").strip()
+
+        if extracted_text:
+            # Parse the response using | delimiter if present
+            if '|' in extracted_text:
+                label_parts = [part.strip() for part in extracted_text.split('|')]
+                TARGET_LABEL = label_parts[0].lower()  # Use first part as primary label
+            else:
+                TARGET_LABEL = extracted_text.split(": ")[2].lower()
+
+            print(f"[startup] Extracted target label: '{TARGET_LABEL}'")
+            return True
+        else:
+            print("[error] Molmo returned empty response")
+            return False
+
+    except requests.Timeout:
+        print("[error] Molmo timeout during label extraction")
+        return False
+    except Exception as e:
+        print(f"[error] Failed to extract label: {e}")
+        return False
+
+def should_detect_object(detection):
+    """Check if detection matches target label"""
+    global TARGET_LABEL
+
+    if TARGET_LABEL is None:
+        # If no target label set, default to person detection
+        cls = str(detection.get("cls", "")).lower()
+        cls_id = detection.get("cls_id", None)
+        return cls == "person" or cls_id == 0
+
+    # Check if detection matches target label
+    cls = str(detection.get("cls", "")).lower()
+    return TARGET_LABEL in cls or cls in TARGET_LABEL
+
+def startup_label_extraction():
+    """Handle startup sequence for label extraction"""
+    global TARGET_LABEL
+
+    print("=== Orchestrator Startup ===", flush=True)
+    print("Please provide an image to extract object label for detection filtering.", flush=True)
+    print("Format: 'image_path' or 'description|image_path|other_info'", flush=True)
+    print("Press Enter to skip and use default person detection.", flush=True)
+
+    try:
+        user_input = input("Enter image path: ").strip()
+
+        if not user_input:
+            print("[startup] No input provided, using default person detection")
+            TARGET_LABEL = "person"
+            return True
+
+        # Extract image path from input
+        image_path = extract_image_path_from_text(user_input)
+
+        if image_path is None:
+            print(f"[startup] Could not find valid image path in: '{user_input}'")
+            print("[startup] Using default person detection")
+            TARGET_LABEL = "person"
+            return True
+
+        # Create session for Molmo communication
+        session = make_session()
+
+        # Extract label using Molmo
+        success = load_image_and_extract_label(image_path, session)
+
+        if not success:
+            print("[startup] Label extraction failed, using default person detection")
+            TARGET_LABEL = "person"
+
+        return True
+
+    except KeyboardInterrupt:
+        print("\n[startup] Interrupted by user")
+        return False
+    except Exception as e:
+        print(f"[startup] Error during label extraction: {e}")
+        print("[startup] Using default person detection")
+        TARGET_LABEL = "person"
+        return True
+
 # ────────────────── HTTP session with retries ──────────────────
 def make_session():
     s = requests.Session()
@@ -166,30 +315,50 @@ class MolmoWorker:
         self.busy.clear()
 
 # ───────────────────────── Main ─────────────────────────
+
 def main():
+    global TARGET_LABEL
+
+    # NEW: Startup label extraction sequence
+    if not startup_label_extraction():
+        print("[startup] Startup cancelled by user")
+        return
+
     print("=== Orchestrator CLI ===", flush=True)
-    print("type 'off' to pause detection, 'on' to resume, 'prompt <text>' to change, 'q' to quit.", flush=True)
+    print(f"Target detection label: '{TARGET_LABEL}'", flush=True)
+    print("type 'off' to pause detection, 'on' to resume, 'prompt ' to change, 'q' to quit.", flush=True)
 
     cap = cv2.VideoCapture(CAM_INDEX)
+
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+
     if not cap.isOpened():
+
         print(f"[error] cannot open camera {CAM_INDEX}")
+
         sys.exit(2)
 
     # Optional camera hints (best-effort)
+
     cap.set(cv2.CAP_PROP_FPS, 30)
+
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     session = make_session()
+
     prompt = PROMPT
+
     molmo = MolmoWorker(session, prompt)
 
     detect_on = True
+
     last_status = 0.0
+
     cmd_q = start_cmd_reader()
 
     # track recent sent boxes
-    recent: List[Tuple[Tuple[float,float,float,float], float]] = []  # (xyxy, ts)
+
+    recent: List[Tuple[Tuple[float,float,float,float], float]] = [] # (xyxy, ts)
 
     try:
         while True:
@@ -207,15 +376,15 @@ def main():
                 elif low == "off":
                     detect_on = False; print("[cmd] detection OFF")
                 elif low == "status":
-                    print(f"[status] detection={'ON' if detect_on else 'OFF'} | prompt='{prompt}' | molmo_busy={molmo.busy.is_set()}")
+                    print(f"[status] detection={'ON' if detect_on else 'OFF'} | prompt='{prompt}' | molmo_busy={molmo.busy.is_set()} | target_label='{TARGET_LABEL}'")
                 elif low.startswith("prompt "):
                     prompt = cmdline[7:].strip()
                     molmo.set_prompt(prompt)
                     print(f"[cmd] updated prompt → {prompt}")
                 else:
                     print(f"[cmd] unknown: {cmdline}")
-
             ok, frame = cap.read()
+
             if not ok:
                 time.sleep(0.01)
                 continue
@@ -229,6 +398,7 @@ def main():
                 continue
 
             # YOLO call
+
             try:
                 resp = session.post(YOLO_URL, json={"image_b64": encode_b64(frame)}, timeout=2.5)
                 resp.raise_for_status()
@@ -241,55 +411,65 @@ def main():
 
             vis = frame.copy()
             draw_boxes(vis, dets, persons_only=False)
-            show_frame(vis, status_text="DETECTION ON")
+            show_frame(vis, status_text=f"DETECTION ON (Target: {TARGET_LABEL})")
 
-            # filter persons + basic heuristics
+            # NEW: Filter based on target label instead of just persons
+            
             h, w = frame.shape[:2]
             img_area = float(h * w)
-            persons = []
+            target_objects = []
+
             for d in dets:
-                if ((d.get("cls","").lower()=="person") or d.get("cls_id")==0) and float(d.get("conf",0)) >= CONF_THR:
+                if should_detect_object(d) and float(d.get("conf",0)) >= CONF_THR:
                     x1,y1,x2,y2 = d["xyxy"]
                     area = box_area((x1,y1,x2,y2))
                     if area < MIN_BOX_AREA_FRAC * img_area:
-                        continue
+                        continue                       
                     ww, hh = max(1.0, x2-x1), max(1.0, y2-y1)
                     aspect = ww / hh
                     if not (MIN_ASPECT <= aspect <= MAX_ASPECT):
                         continue
-                    persons.append(d)
+                        
+                    target_objects.append(d)
 
-            if not persons:
+            if not target_objects:
                 continue
 
-            best = max(persons, key=lambda d: float(d.get("conf",0)))
+            best = max(target_objects, key=lambda d: float(d.get("conf",0)))
             box = tuple(map(float, best["xyxy"]))
 
             # temporal dedupe
             now = time.time()
             recent = [(b, t) for (b, t) in recent if now - t <= DEDUPE_COOLDOWN]
+
             if any(box_iou(box, b) >= DEDUPE_IOU_THR for (b, t) in recent):
                 continue
 
             okc, c = crop(frame, best["xyxy"])
+
             if not okc:
                 continue
 
             # backpressure: only submit if worker is idle
+
             if molmo.submit(c):
                 recent.append((box, now))
-            # else silently skip; worker is busy
 
+            # else silently skip; worker is busy
             time.sleep(0.01)
 
     finally:
+
         try:
             molmo.close()
             cap.release()
             cv2.destroyAllWindows()
+
         except Exception:
             pass
+
         print("[camera] closed")
 
 if __name__ == "__main__":
+
     main()

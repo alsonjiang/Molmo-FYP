@@ -1,0 +1,1 @@
+[ERROR:0@45.683] global obsensor_uvc_stream_channel.cpp:163 cv::obsensor::getStreamChannelGroup Camera index out of range
