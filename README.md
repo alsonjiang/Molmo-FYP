@@ -76,9 +76,10 @@ On separate terminals:
 
 Save an image in the 'images' folder. 
 
-In the modified_main.py terminal, when prompted, type the image path like so ../images/(your_image)
-
-
+In the modified_main.py terminal, when prompted, type the image path like so
+```bash
+  ../images/(your_image)
+```
 
 ## Authors
 
