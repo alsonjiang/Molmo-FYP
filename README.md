@@ -1,87 +1,87 @@
-Setup:  
-git clone https://github.com/alsonjiang/Molmo-FYP.git  
-cd Molmo-FYP
 
-(Please use python 11 else it will not work)  
-python -m venv .venv  
-source .venv/bin/activate # (Windows:.\.venv\Scripts\activate)  
-pip install -r requirements.txt
+# Multimodal Models for Robotics Vision
 
-Download Molmo molmo model and smoke test:
+This is a project integrating YOLOv11 object detection and MolmoE-1B multimodal Mixture-of-Experts LLM. 
 
-1. Run download_model.py
-   This creates a folder named MolmoE-1B-0924-NF4 in your project root that stores the model
+An image is first given to the orchestrator. It will then call YOLO to detect persons in the camera and Molmo to confirm if they are the same person or not. 
 
-2. Run model_test.py
-   This tests the model and the working environment  
-   #The image displays a solid gray square with no visible content or features.  
-   #It appears to be a plain, unadorned gray square without any discernible elements, patterns, or variations in color or texture.
 
-Test actual functionalities:
 
-1. start molmo-service  
-   cd molmo-service  
-   python -m uvicorn app:app --host 0.0.0.0 --port 8000
 
-2. start yolo-service  
-   cd yolo-service  
-   python -m uvicorn app:app --host 0.0.0.0 --port 9000
+## Run Locally
 
-3. start main.py  
-   cd orchestrator  
-   set MOLMO_URL=http://localhost:8000/caption  
-   set YOLO_URL=http://localhost:9000/detect  
-   python main.py
+First, download Python 3.11 and create a virtual environment 
 
-To check status of services:  
-curl http://localhost:8000/health  
-curl http://localhost:9000/health
+```bash
+  python -m venv .venv
+```
 
----
+```bash
+  .venv\Scripts\activate
+```
 
-Dockerised (CURRENTLY OUTDATED):
+Clone the project
 
-1. Install NVIDIA driver and reboot
+```bash
+  git clone https://github.com/alsonjiang/Molmo-FYP.git
+```
 
-sudo ubuntu-drivers autoinstall  
- sudo reboot
+Go to the project directory
 
-2. Install Docker Engine and NVIDIA Container Toolkit
+```bash
+  cd Molmo-FYP
+```
 
-   _Docker Engine_  
-   curl -fsSL https://get.docker.com | sh  
-   sudo usermod -aG docker $USER  
-   newgrp docker
+Install dependencies
 
-   _NVIDIA Container Toolkit_  
-   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-    | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-   curl -fsSL https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list \
-    | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-   sudo apt update && sudo apt install -y nvidia-container-toolkit
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
+```bash
+  pip install -r requirements.txt
+```
 
-Verify GPU:  
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+Download finetuned MolmoE model
 
-3. Clone this repository  
-   git clone https://github.com/alsonjiang/Molmo-FYP.git  
-   cd Molmo-FYP
+```bash
+  python download_model.py
+```
 
-4. Build the Docker image (~13GB)  
-   docker build -f Dockerfile.cuda -t molmo-test:latest .
+On separate terminals: 
 
-5. Download model weights  
-   docker run --rm -it \
-    -v "$PWD:/models" \
-    -w /models \
-    molmo-test:latest \
-    python /app/download_model.py
+1. Start the VLM service
+```bash
+  cd molmo-service
+```
+```bash
+  python -m uvicorn app:app --host 0.0.0.0 --port 8000
+```
+2. Start the object detection service
+```bash
+  cd yolo-service
+```
+```bash
+  python -m uvicorn app:app --host 0.0.0.0 --port 9000
+```
+3. Start the orchestrator script
+```bash
+  cd orchestrator
+```
+```bash
+  set MOLMO_URL=http://localhost:8000/caption
+```
+```bash
+  set YOLO_URL=http://localhost:9000/detect
+```
+```bash
+  python modified_main.py
+```
 
-6. Run inference  
-   docker run --rm -it --gpus all \
-    -v "$PWD/MolmoE-1B-0924-NF4:/molmoE" \
-    -e MODEL_DIR=/molmoE \
-    molmo-test:latest
+Save an image in the 'images' folder. 
+
+In the modified_main.py terminal, when prompted, type the image path like so ../images/(your_image)
+
+
+
+## Authors
+
+- [@Alson Jiang](https://www.github.com/alsonjiang)
+- [@Reuben Kway](https://www.github.com/reubzdubz)
+
