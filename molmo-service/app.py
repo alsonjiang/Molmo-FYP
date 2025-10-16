@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from PIL import Image
 import torch
 from transformers import AutoProcessor, AutoModelForCausalLM, GenerationConfig
+import uvicorn
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 HERE = Path(__file__).resolve().parent
@@ -27,7 +28,7 @@ if torch.cuda.is_available():
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 # Keep outputs short while testing; you can raise later.
-MAX_NEW_TOKENS = int(os.getenv("MOLMO_MAX_NEW_TOKENS", "32"))
+MAX_NEW_TOKENS = int(os.getenv("MOLMO_MAX_NEW_TOKENS", "16"))
 # Downscale very large images to reduce vision backbone cost.
 MAX_SIDE = int(os.getenv("MOLMO_MAX_SIDE", "768"))
 # If you get any dtype mismatch, flip this to 1 to force full FP32 (slower, but safe)
@@ -146,7 +147,7 @@ def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
 
 def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
     t0 = time.time()
-        with torch.inference_mode():
+    with torch.inference_mode():
         if hasattr(model, "generate_from_batch"):
             with torch.autocast(device_type="cuda", enabled=True, dtype=torch.float16):
                 out = model.generate_from_batch(batch, GENCFG, tokenizer=tok, use_cache=False)
@@ -226,3 +227,10 @@ def caption(inp: CaptionIn):
     batch = _build_batch(img, inp.prompt or "Describe the image.")
     text = _generate(batch)
     return {"caption": text}
+
+
+if __name__ == '__main__':
+    HOST = os.getenv("HOST", "0.0.0.0")
+    PORT = int(os.getenv("PORT", "8000"))  # YOLO on 9000
+    # Use 1 worker so the warmup/fuse runs once (multiple workers would rerun imports)
+    uvicorn.run("app:app", host=HOST, port=PORT, reload=False, workers=1)

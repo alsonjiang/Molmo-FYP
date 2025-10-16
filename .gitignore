@@ -34,3 +34,9 @@ hf_cache/
 **/huggingface/
 **/modules/transformers_modules/
 
+#yolo finetuning folders
+finetune-yolo/
+runs/
+
+
+

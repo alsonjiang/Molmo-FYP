@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from ultralytics import YOLO
 from PIL import Image
+import uvicorn
 
 app = FastAPI()
 
@@ -118,3 +119,9 @@ def detect(inp: DetectIn):
             "conf": float(b.conf[0].item())
         })
     return {"detections": dets, "inference_time_ms": round(dt_ms, 2)}
+
+if __name__ == '__main__':
+    HOST = os.getenv("HOST", "0.0.0.0")
+    PORT = int(os.getenv("PORT", "9000"))  # YOLO on 9000
+    # Use 1 worker so the warmup/fuse runs once (multiple workers would rerun imports)
+    uvicorn.run("app:app", host=HOST, port=PORT, reload=False, workers=1, access_log=False) #turned off logging for this service
