@@ -27,25 +27,30 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
 # ── Settings ─────────────────────────────────────────────────────────────────
-# Keep outputs short while testing; you can raise later.
 MAX_NEW_TOKENS = int(os.getenv("MOLMO_MAX_NEW_TOKENS", "16"))
-# Downscale very large images to reduce vision backbone cost.
 MAX_SIDE = int(os.getenv("MOLMO_MAX_SIDE", "768"))
-# If you get any dtype mismatch, flip this to 1 to force full FP32 (slower, but safe)
 FORCE_FP32 = os.getenv("MOLMO_FORCE_FP32", "0") == "1"
+FORCE_CPU  = os.getenv("MOLMO_FORCE_CPU", "0") == "1"   # NEW: optional override
 
-# ── Load processor/model fully on GPU ────────────────────────────────────────
-processor = AutoProcessor.from_pretrained(MODEL_DIR.as_posix(), trust_remote_code=True, local_files_only=True)
+# ── Load processor/model with safe device logic ──────────────────────────────
+processor = AutoProcessor.from_pretrained(
+    MODEL_DIR.as_posix(), trust_remote_code=True, local_files_only=True
+)
 
-# CRITICAL: put the whole model on cuda:0, no CPU/disk offload, with fp16 math.
-dtype = torch.float32 if FORCE_FP32 else torch.float16
+USE_CUDA = torch.cuda.is_available() and not FORCE_CPU
+# dtype: fp16 on CUDA (unless FORCE_FP32), fp32 on CPU for safety
+dtype = torch.float16 if (USE_CUDA and not FORCE_FP32) else torch.float32
+
+# Device map: CUDA auto if available, otherwise stick to CPU
+device_map = "auto" if USE_CUDA else {"": "cpu"}  # CHANGED
+
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR.as_posix(),
     trust_remote_code=True,
     local_files_only=True,
-    torch_dtype=torch.float16,
-    device_map={"": 0},            # force all modules on GPU 0
-    offload_folder=None,           # no CPU/disk offload
+    torch_dtype=dtype,             # CHANGED (was hard-coded fp16)
+    device_map=device_map,         # CHANGED (was {"": 0})
+    offload_folder=None,
 )
 model.eval()
 
@@ -65,7 +70,6 @@ GENCFG = GenerationConfig(
     num_beams=1,
     eos_token_id=eos_id,
     pad_token_id=pad_id,
-    # use_cache speeds multi-token decode; keep True unless you hit a KV bug
     use_cache=True,
 )
 if tok is not None:
@@ -97,63 +101,48 @@ def _resize_if_needed(img: Image.Image) -> Image.Image:
     return img.resize((nw, nh), Image.Resampling.LANCZOS)
 
 def _move_cast(t: torch.Tensor) -> torch.Tensor:
-    # move to GPU; cast floats to model dtype (fp16/fp32)
+    # move to model device; cast floats to model dtype (fp16/fp32)
     if t.is_floating_point():
         return t.to(EMBED_DEVICE, dtype=MODEL_DTYPE, non_blocking=True)
     return t.to(EMBED_DEVICE, non_blocking=True)
 
-def _build_batch(img: Image.Image, prompt: str) -> Dict[str, Any]:
+def _build_batch(img: Image.Image, prompt: str, timings: Optional[Dict[str, float]] = None) -> Dict[str, Any]:  # CHANGED: accept timings
+    t0 = time.time()
     batch = processor.process(images=[img], text=prompt)
     batch = {k: v for k, v in batch.items() if v is not None}
 
-    """
-    # ✅ Force pixel path; drop any pre-embedded 'images' keys
-    if "pixel_values" in batch:
-        batch.pop("images", None)
-        batch.pop("image_values", None)
-        batch.pop("image", None)
-        
-    # Now normalize just like before…
-    has_image = False
-    if "pixel_values" in batch and isinstance(batch["pixel_values"], torch.Tensor):
-        x = batch["pixel_values"]
-        if x.dim() == 3:  # [C,H,W] -> [1,C,H,W]
-            x = x.unsqueeze(0)
-        batch["pixel_values"] = _move_cast(x)
-        has_image = True 
-    if not has_image:
-        raise HTTPException(status_code=422, detail="no pixel_values from processor")
-    """
-    batch["images"] = torch.unsqueeze(batch["images"],0)
-    batch["image_input_idx"] = torch.unsqueeze(batch["image_input_idx"],0)
-    batch["image_masks"] = torch.unsqueeze(batch["image_masks"],0)
-    # Move non-image tensors; add batch dim for 1D
+    # Keep your custom path; preserve shapes then move to device
+    batch["images"] = torch.unsqueeze(batch["images"], 0)
+    batch["image_input_idx"] = torch.unsqueeze(batch["image_input_idx"], 0)
+    batch["image_masks"] = torch.unsqueeze(batch["image_masks"], 0)
+
     for k, v in list(batch.items()):
-        #if k == "pixel_values":
-        #    continue
-        print(f"{k} dimensions: {v.shape}")
+        print(f"{k} dimensions: {getattr(v, 'shape', None)}")
         if isinstance(v, torch.Tensor):
             if v.dim() == 1:
-                v = torch.unsqueeze(v,0)
+                v = torch.unsqueeze(v, 0)
             batch[k] = v.to(EMBED_DEVICE, non_blocking=True)
 
-    # Drop broken caches and return
     if "past_key_values" in batch:
         pkv = batch["past_key_values"]
         if pkv is None or (isinstance(pkv, (list, tuple)) and any(x is None for x in pkv)):
             batch.pop("past_key_values", None)
-    return batch
 
+    if timings is not None:
+        timings["prep_s"] = time.time() - t0
+    return batch
 
 def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
     t0 = time.time()
+    use_cuda_autocast = (EMBED_DEVICE.type == "cuda") and (MODEL_DTYPE == torch.float16)  # CHANGED
     with torch.inference_mode():
         if hasattr(model, "generate_from_batch"):
-            with torch.autocast(device_type="cuda", enabled=True, dtype=torch.float16):
+            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):  # CHANGED
                 out = model.generate_from_batch(batch, GENCFG, tokenizer=tok, use_cache=False)
         else:
-            with torch.autocast(device_type="cuda", enabled=True, dtype=torch.float16):
+            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):  # CHANGED
                 out = model.generate(**batch, generation_config=GENCFG, use_cache=False)
+
     if timings is not None:
         timings["generate_s"] = time.time() - t0
 
@@ -176,8 +165,7 @@ def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
         return out.strip()
     return str(out)
 
-@app.on_event("startup")
-def _warmup():
+async def lifespan(app: FastAPI):
     try:
         img = Image.new("RGB", (64, 64), (128, 128, 128))
         img = _resize_if_needed(img)
@@ -186,18 +174,21 @@ def _warmup():
         print("[warmup] Molmo ready on", EMBED_DEVICE, "dtype", MODEL_DTYPE)
     except Exception as e:
         print("[warmup] skipped:", e)
+    yield
+    print("[shutdown] Molmo service exiting.")
 
 @app.get("/health")
 def health():
     try:
         return {
             "ok": True,
-            "model_dir": str(MODEL_DTYPE),
+            "model_dir": str(MODEL_DIR),   # CHANGED (was dtype)
             "device": str(EMBED_DEVICE),
             "dtype": str(MODEL_DTYPE),
             "max_new_tokens": MAX_NEW_TOKENS,
             "max_side": MAX_SIDE,
             "force_fp32": FORCE_FP32,
+            "force_cpu": FORCE_CPU,
             "has_generate_from_batch": hasattr(model, "generate_from_batch"),
             "cuda_available": torch.cuda.is_available(),
             "cuda_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
@@ -208,12 +199,12 @@ def health():
 @app.get("/profile")
 def profile():
     """Run a tiny in-memory image and return stage timings."""
-    times = {}
+    times: Dict[str, float] = {}
     try:
         img = Image.new("RGB", (320, 240), (180, 180, 180))
         img = _resize_if_needed(img)
-        _ = _build_batch(img, "ok", timings=times)
-        _ = _generate(_, timings=times)
+        batch = _build_batch(img, "ok", timings=times)  # CHANGED: now valid
+        _ = _generate(batch, timings=times)
         times["ok"] = True
     except Exception as e:
         times["ok"] = False
@@ -228,9 +219,7 @@ def caption(inp: CaptionIn):
     text = _generate(batch)
     return {"caption": text}
 
-
 if __name__ == '__main__':
     HOST = os.getenv("HOST", "0.0.0.0")
-    PORT = int(os.getenv("PORT", "8000"))  # YOLO on 9000
-    # Use 1 worker so the warmup/fuse runs once (multiple workers would rerun imports)
+    PORT = int(os.getenv("PORT", "8000"))
     uvicorn.run("app:app", host=HOST, port=PORT, reload=False, workers=1)
