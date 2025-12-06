@@ -4,6 +4,7 @@ annotated-types==0.7.0
 anyio==4.10.0
 astunparse==1.6.3
 bitsandbytes==0.47.0
+beautifulsoup4==4.14.3
 certifi==2025.8.3
 charset-normalizer==3.4.3
 click==8.2.1
@@ -51,6 +52,7 @@ opencv-python-headless==4.10.0.84
 opt_einsum==3.4.0
 optree==0.17.0
 packaging==25.0
+peft==0.18.0
 pi_heif==1.1.1
 pillow==11.3.0
 pillow-avif-plugin==1.5.2
