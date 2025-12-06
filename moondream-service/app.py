@@ -25,11 +25,13 @@ print(f"[moondream-service] Loading {MODEL_ID}@{MODEL_REVISION} on {DEVICE}...")
 
 # This uses the custom moondream helper methods (caption/query) from hf_moondream.py
 # via trust_remote_code.
+
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_ID,
     revision=MODEL_REVISION,
     trust_remote_code=True,
     device_map={"": DEVICE},
+    torch_dtype=torch.bfloat16 if DEVICE == "cuda" else torch.float32,
 )
 
 

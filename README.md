@@ -71,12 +71,13 @@ On separate terminals:
   set YOLO_URL=http://localhost:9000/detect
 ```
 ```bash
-  python modified_main.py
+  python main.py
 ```
 
 Save an image in the 'images' folder. 
 
-In the modified_main.py terminal, when prompted, type the image path like so
+In the modified_main.py terminal, when prompted, type the image path like so:
+(remember to include .jpg/.png etc)
 ```bash
   ../images/(your_image)
 ```

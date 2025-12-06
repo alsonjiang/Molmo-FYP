@@ -27,10 +27,10 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
 # ── Settings ─────────────────────────────────────────────────────────────────
-MAX_NEW_TOKENS = int(os.getenv("MOLMO_MAX_NEW_TOKENS", "16"))
+MAX_NEW_TOKENS = int(os.getenv("MOLMO_MAX_NEW_TOKENS", "64"))
 MAX_SIDE = int(os.getenv("MOLMO_MAX_SIDE", "768"))
 FORCE_FP32 = os.getenv("MOLMO_FORCE_FP32", "0") == "1"
-FORCE_CPU  = os.getenv("MOLMO_FORCE_CPU", "0") == "1"   # NEW: optional override
+FORCE_CPU  = os.getenv("MOLMO_FORCE_CPU", "0") == "1"   # optional override
 
 # ── Load processor/model with safe device logic ──────────────────────────────
 processor = AutoProcessor.from_pretrained(
@@ -42,14 +42,14 @@ USE_CUDA = torch.cuda.is_available() and not FORCE_CPU
 dtype = torch.float16 if (USE_CUDA and not FORCE_FP32) else torch.float32
 
 # Device map: CUDA auto if available, otherwise stick to CPU
-device_map = "auto" if USE_CUDA else {"": "cpu"}  # CHANGED
+device_map = "auto" if USE_CUDA else {"": "cpu"}
 
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR.as_posix(),
     trust_remote_code=True,
     local_files_only=True,
-    torch_dtype=dtype,             # CHANGED (was hard-coded fp16)
-    device_map=device_map,         # CHANGED (was {"": 0})
+    torch_dtype=dtype,
+    device_map=device_map,
     offload_folder=None,
 )
 model.eval()
@@ -82,6 +82,9 @@ class CaptionIn(BaseModel):
     image_b64: str
     prompt: Optional[str] = "Describe the image."
 
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
 def _b64_to_pil(b64: str) -> Image.Image:
     try:
         raw = base64.b64decode(b64)
@@ -106,17 +109,18 @@ def _move_cast(t: torch.Tensor) -> torch.Tensor:
         return t.to(EMBED_DEVICE, dtype=MODEL_DTYPE, non_blocking=True)
     return t.to(EMBED_DEVICE, non_blocking=True)
 
-def _build_batch(img: Image.Image, prompt: str, timings: Optional[Dict[str, float]] = None) -> Dict[str, Any]:  # CHANGED: accept timings
+def _build_batch(img: Image.Image, prompt: str, timings: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     t0 = time.time()
     batch = processor.process(images=[img], text=prompt)
     batch = {k: v for k, v in batch.items() if v is not None}
 
-    # Keep your custom path; preserve shapes then move to device
+    # Ensure explicit batch dim
     batch["images"] = torch.unsqueeze(batch["images"], 0)
     batch["image_input_idx"] = torch.unsqueeze(batch["image_input_idx"], 0)
     batch["image_masks"] = torch.unsqueeze(batch["image_masks"], 0)
 
     for k, v in list(batch.items()):
+        # Debug print (you can comment this out if too noisy)
         print(f"{k} dimensions: {getattr(v, 'shape', None)}")
         if isinstance(v, torch.Tensor):
             if v.dim() == 1:
@@ -132,15 +136,15 @@ def _build_batch(img: Image.Image, prompt: str, timings: Optional[Dict[str, floa
         timings["prep_s"] = time.time() - t0
     return batch
 
-def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
+def _generate(batch: Dict[str, Any], timings: Optional[Dict[str, float]] = None) -> str:
     t0 = time.time()
-    use_cuda_autocast = (EMBED_DEVICE.type == "cuda") and (MODEL_DTYPE == torch.float16)  # CHANGED
+    use_cuda_autocast = (EMBED_DEVICE.type == "cuda") and (MODEL_DTYPE == torch.float16)
     with torch.inference_mode():
         if hasattr(model, "generate_from_batch"):
-            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):  # CHANGED
+            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):
                 out = model.generate_from_batch(batch, GENCFG, tokenizer=tok, use_cache=False)
         else:
-            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):  # CHANGED
+            with torch.autocast(device_type="cuda", enabled=use_cuda_autocast, dtype=torch.float16):
                 out = model.generate(**batch, generation_config=GENCFG, use_cache=False)
 
     if timings is not None:
@@ -165,6 +169,36 @@ def _generate(batch: Dict[str, Any], timings: Dict[str, float] = None) -> str:
         return out.strip()
     return str(out)
 
+def _strip_to_answer(text: str) -> str:
+    """
+    Given a Molmo-style chat-like transcript, keep only the assistant answer.
+
+    Example raw:
+      'User: ... same person\\n different person Assistant: same person'
+
+    We want:
+      'same person'
+    """
+    if not text:
+        return ""
+
+    t = text.strip()
+    lower = t.lower()
+
+    # If we see 'assistant:', keep only the part after the LAST occurrence
+    if "assistant:" in lower:
+        last = lower.rfind("assistant:")
+        # Slice original string to keep original casing
+        t = t[last + len("assistant:"):].strip()
+
+    # Only keep the first line after that
+    t = t.splitlines()[0].strip()
+
+    return t
+
+
+# ── Lifespan / health / profile ──────────────────────────────────────────────
+
 async def lifespan(app: FastAPI):
     try:
         img = Image.new("RGB", (64, 64), (128, 128, 128))
@@ -182,7 +216,7 @@ def health():
     try:
         return {
             "ok": True,
-            "model_dir": str(MODEL_DIR),   # CHANGED (was dtype)
+            "model_dir": str(MODEL_DIR),
             "device": str(EMBED_DEVICE),
             "dtype": str(MODEL_DTYPE),
             "max_new_tokens": MAX_NEW_TOKENS,
@@ -203,7 +237,7 @@ def profile():
     try:
         img = Image.new("RGB", (320, 240), (180, 180, 180))
         img = _resize_if_needed(img)
-        batch = _build_batch(img, "ok", timings=times)  # CHANGED: now valid
+        batch = _build_batch(img, "ok", timings=times)
         _ = _generate(batch, timings=times)
         times["ok"] = True
     except Exception as e:
@@ -211,13 +245,25 @@ def profile():
         times["error"] = f"{type(e).__name__}: {e}"
     return times
 
+
+# ── Caption endpoint ─────────────────────────────────────────────────────────
+
 @app.post("/caption")
 def caption(inp: CaptionIn):
     img = _b64_to_pil(inp.image_b64)
     img = _resize_if_needed(img)
     batch = _build_batch(img, inp.prompt or "Describe the image.")
-    text = _generate(batch)
-    return {"caption": text}
+    raw = _generate(batch)
+
+    # Strip to just the assistant's answer for the HTTP response
+    answer = _strip_to_answer(raw)
+
+    # Optional debug logs to see what Molmo actually produced
+    print(f"[molmo raw] {raw!r}")
+    print(f"[molmo answer] {answer!r}")
+
+    return {"caption": answer}
+
 
 if __name__ == '__main__':
     HOST = os.getenv("HOST", "0.0.0.0")
