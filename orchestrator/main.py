@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import cv2, requests
 from PIL import Image
 import numpy as np
+from bs4 import BeautifulSoup
 
 # ───────────────────────── Config ─────────────────────────
 
@@ -31,6 +32,10 @@ IDENTITY_PROMPT = (
 CAPTION_PROMPT = os.getenv(
     "CAPTION_PROMPT",
     "Describe the person in the image in one or two concise sentences."
+)
+
+POINTING_PROMPT = (    
+    "Point to a person in the image"
 )
 
 YOLO_URL  = os.getenv("YOLO_URL",  "http://localhost:9000/detect")
@@ -55,12 +60,16 @@ def resolve_mode() -> str:
             return "identity"
         if arg in ("caption", "cap"):
             return "caption"
+        if arg in ("pointing", "point"):
+            return "pointing"
 
     env_mode = os.getenv("MODE", "").strip().lower()
     if env_mode in ("identity", "id", "match"):
         return "identity"
     if env_mode in ("caption", "cap"):
         return "caption"
+    if env_mode in ("pointing", "point"):
+        return "pointing"
 
     return "identity"
 
@@ -240,6 +249,41 @@ def classify_match(text: str) -> str:
         return "DIFFERENT"
     return "DIFFERENT"
 
+def extract_points_from_molmo(text: str) -> List[List[float]]:
+    try:
+        html = text
+        soup = BeautifulSoup(html, 'html.parser')
+        tag = soup.find('point')
+
+        if tag:
+            coords = []
+            coords.append([float(tag[f'x']),float(tag[f'y'])])
+            label = tag['alt']
+        else:
+            tag = soup.find('points')
+            # Extract values
+            coords = []
+            for i in range(1, 20):
+                coords.append([float(tag[f'x{i}']),float(tag[f'y{i}'])])
+            label = tag['alt']
+            print(f'Extracted {len(coords)} points with label: {label}')
+        return coords
+    except:
+        print('No points found')
+
+def are_points_in_bbox(points: List[List[float]], box: List[float]) -> bool:
+    x1, y1, x2, y2 = box
+    for (px, py) in points:
+        if not (x1 <= (px/100) <= x2 and y1 <= (py/100) <= y2):
+            return False
+    return True
+
+def draw_points_on_frame(frame_bgr: np.ndarray, points: List[List[float]]):
+    h, w = frame_bgr.shape[:2]
+    for (px, py) in points:
+        cx = int((px / 100) * w)
+        cy = int((py / 100) * h)
+        cv2.circle(frame_bgr, (cx, cy), 5, (0, 0, 255), -1)
 
 # ────────────── VLM worker ───────────────
 
@@ -489,6 +533,62 @@ def run_caption_mode(session):
         cv2.destroyAllWindows()
         print("[caption] camera closed")
 
+def run_pointing_mode(session):
+    cap = cv2.VideoCapture(CAM_INDEX)
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+
+    if not cap.isOpened():
+        print(f"[error] cannot open camera {CAM_INDEX}")
+        sys.exit(2)
+
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    vlm = VLMWorker(session, POINTING_PROMPT)
+    
+    old_points = [[0,0]]
+
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                time.sleep(0.01)
+                continue
+            persons = yolo_detect_persons(frame, session)
+            vis = frame.copy()
+            draw_boxes(vis, persons, persons_only=True)
+            draw_points_on_frame(vis, old_points)
+            points = extract_points_from_molmo(vlm.last_text)
+            
+            if points:
+                old_points = points
+            status = "POINTING ON"
+            if not persons:
+                status = "NO PERSON"
+            else:
+                if not vlm.busy.is_set():
+                    if vlm.submit(vis):
+                        print("[orchestrator] submitted live feed for pointing", flush=True)
+                if vlm.last_state == "OK":
+                    best = max(persons, key=lambda d: float(d.get("conf", 0)))
+                    if are_points_in_bbox(old_points, best["xyxy"]):
+                        status = "POINTS OK"
+                    else:
+                        status = "POINTS OUTSIDE"
+                elif vlm.last_state in ("ERROR", "TIMEOUT"):
+                    status = vlm.last_state
+                elif vlm.last_state == "PENDING":
+                    status = "GENERATING POINTS..."
+
+            show_frame(vis, status_text=status)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+            time.sleep(0.01)
+    finally:
+        vlm.close()
+        cap.release()
+        cv2.destroyAllWindows()
+        print("[pointing] camera closed")
 
 # ───────────────────────── Main ─────────────────────────
 
@@ -499,6 +599,8 @@ def main():
 
     if mode == "caption":
         run_caption_mode(session)
+    elif mode == "pointing":
+        run_pointing_mode(session)
     else:
         run_identity_mode(session)
 
