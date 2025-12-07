@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from PIL import Image
 import torch
 from transformers import AutoProcessor, AutoModelForCausalLM, GenerationConfig
+import peft
 import uvicorn
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -15,6 +16,9 @@ ROOT = HERE.parent
 MODEL_DIR = (ROOT / "MolmoE-1B-0924-NF4").resolve()
 if not MODEL_DIR.exists():
     raise FileNotFoundError(f"Model folder not found: {MODEL_DIR}")
+LORA_DIR = (ROOT / "MolmoE_Human_Pointing_LoRA").resolve()
+if not LORA_DIR.exists():
+    raise FileNotFoundError(f"LoRA not found: {LORA_DIR}, loading base model without LoRA.")
 
 # ── Quiet logs ───────────────────────────────────────────────────────────────
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
@@ -53,6 +57,15 @@ model = AutoModelForCausalLM.from_pretrained(
     offload_folder=None,
 )
 model.eval()
+if LORA_DIR.exists():
+    model = peft.PeftModel.from_pretrained(
+        model,
+        LORA_DIR.as_posix(),
+        torch_dtype=dtype,
+        device_map=device_map,
+        offload_folder=None,
+    )
+    print(f"[molmo-service] Loaded LoRA from {LORA_DIR.name}")
 
 try:
     EMBED_DEVICE = model.get_input_embeddings().weight.device

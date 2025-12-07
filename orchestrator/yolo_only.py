@@ -1,3 +1,7 @@
+#this script does not involve VLMs 
+#it is to test if the YOLO service (should be at :9000) is working
+#you should see a window pop up with your live webcam view + FPS
+
 import os, io, base64, time, cv2, requests
 import numpy as np
 

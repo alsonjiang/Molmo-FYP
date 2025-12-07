@@ -1,8 +1,2 @@
 Created quantized layers based on config
 Created quantized layers based on config
-input_ids dimensions: torch.Size([322])
-images dimensions: torch.Size([1, 2, 576, 588])
-image_input_idx dimensions: torch.Size([1, 2, 144])
-image_masks dimensions: torch.Size([1, 2, 576])
-[warmup] Molmo ready on cuda:0 dtype torch.float16
-INFO:     127.0.0.1:60190 - "GET /health HTTP/1.1" 200 OK

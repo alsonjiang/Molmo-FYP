@@ -1,10 +1,4 @@
-=== Orchestrator Startup ===
-Please provide an image to extract object label for detection filtering.
-Format: 'image_path' or 'description|image_path|other_info'
-Press Enter to skip and use default person detection.
-Enter image path: [startup] Could not find valid image path in: 'man'
-[startup] Using default person detection
-=== Orchestrator CLI ===
-Target detection label: 'person'
-type 'off' to pause detection, 'on' to resume, 'prompt ' to change, 'q' to quit.
-[error] cannot open camera 1
+=== Orchestrator CLI (Molmo Person Comparison) ===
+=== Orchestrator Startup: Reference Image ===
+Enter path to a reference image of the target person (or press Enter to cancel):
+Reference image path: [startup] File not found: \images\portrait.jpg
