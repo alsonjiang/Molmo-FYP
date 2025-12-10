@@ -40,6 +40,7 @@ POINTING_PROMPT = (
 
 YOLO_URL  = os.getenv("YOLO_URL",  "http://localhost:9000/detect")
 VLM_URL   = os.getenv("MOLMO_URL", "http://localhost:8000/caption")
+#MOONDREAM_URL   = os.getenv("MOONDREAM_URL", "http://localhost:8003/caption")
 CAM_INDEX = int(os.getenv("CAM_INDEX", "0"))
 VLM_TIMEOUT_S = float(os.getenv("MOLMO_TIMEOUT_S", "80.0"))
 
