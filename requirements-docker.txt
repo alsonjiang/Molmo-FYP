@@ -1,0 +1,28 @@
+# Web framework
+fastapi
+uvicorn
+pydantic
+
+# Vision + image I/O
+opencv-python-headless
+pillow
+numpy
+
+# HTTP + parsing
+requests
+beautifulsoup4
+
+# HF / multimodal stack
+transformers == 4.56.1
+accelerate
+huggingface-hub
+safetensors
+bitsandbytes
+
+# YOLO
+ultralytics
+
+# extras that are necessary by molmo
+einops
+tensorflow
+safetensors

@@ -1,0 +1,35 @@
+
+services:
+
+  molmo:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+      args:
+        SERVICE_PATH: molmo-service
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+
+    
+  moondream:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+      args:
+        SERVICE_PATH: moondream-service
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    # DO NOT EXPOSE PORT unless you want to swap to Moondream
+    # ports:
+    #   - "8000:8000"
+
+  yolo:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+      args:
+        SERVICE_PATH: yolo-service
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports:
+      - "9000:9000"     # YOLO permanently on 9000

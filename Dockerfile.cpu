@@ -1,11 +1,10 @@
-FROM pytorch/pytorch:2.3.0-cuda11.8-cudnn8-runtime
+FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
@@ -14,13 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python deps
+# Shared minimal deps for orchestrator (and could be reused if needed)
 COPY requirements-docker.txt /tmp/requirements-docker.txt
 RUN pip install --no-cache-dir -r /tmp/requirements-docker.txt
 
-# Let compose choose the service folder
+# Let compose tell us which folder to copy in
 ARG SERVICE_PATH=.
 COPY ${SERVICE_PATH}/ /app/
-
-# ⬇️ ADD THIS: copy the model folder from build context root into container root
-COPY MolmoE-1B-0924-NF4 /MolmoE-1B-0924-NF4
