@@ -1,28 +1,35 @@
-# Web framework
-fastapi
-uvicorn
-pydantic
+# --- Core web stack ---
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.11.7
 
-# Vision + image I/O
-opencv-python-headless
-pillow
-numpy
+# --- Utilities ---
+loguru==0.7.3
+python-dotenv==1.1.1
 
-# HTTP + parsing
-requests
-beautifulsoup4
+# --- Vision + image I/O ---
+opencv-python-headless==4.10.0.84
+pillow==11.3.0
+numpy==2.2.6
 
-# HF / multimodal stack
-transformers == 4.56.1
-accelerate
-huggingface-hub
-safetensors
-bitsandbytes
+# --- HTTP + parsing ---
+requests==2.32.5
+beautifulsoup4==4.14.3
 
-# YOLO
-ultralytics
-
-# extras that are necessary by molmo
-einops
+# --- HF / multimodal stack ---
+torch==2.6.0
+torchvision==0.21.0
+torchaudio==2.6.0
+transformers==4.56.1
+tokenizers==0.22.0
+accelerate==1.10.1
+huggingface-hub==0.34.4
+safetensors==0.6.2
+bitsandbytes==0.47.0
+einops==0.8.1
+hf_transfer==0.1.9
 tensorflow
-safetensors
+
+# --- Misc HF friends ---
+regex==2025.9.1
+filelock==3.19.1

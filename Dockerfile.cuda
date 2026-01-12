@@ -22,5 +22,5 @@ RUN pip install --no-cache-dir -r /tmp/requirements-docker.txt
 ARG SERVICE_PATH=.
 COPY ${SERVICE_PATH}/ /app/
 
-# ⬇️ ADD THIS: copy the model folder from build context root into container root
+#copy the model folder from build context root into container root
 COPY MolmoE-1B-0924-NF4 /MolmoE-1B-0924-NF4

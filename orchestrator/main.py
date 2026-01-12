@@ -63,6 +63,9 @@ def resolve_mode() -> str:
             return "caption"
         if arg in ("pointing", "point"):
             return "pointing"
+        if arg in ("oneshot", "one", "single"):
+            return "oneshot"
+
 
     env_mode = os.getenv("MODE", "").strip().lower()
     if env_mode in ("identity", "id", "match"):
@@ -404,6 +407,36 @@ def startup_reference(session) -> Optional[np.ndarray]:
 
 # ──────────────── Main loops ────────────────
 
+def run_oneshot_where_is_person(session):
+    cap = cv2.VideoCapture(CAM_INDEX)
+    if not cap.isOpened():
+        print(f"[error] cannot open camera {CAM_INDEX}")
+        return
+
+    ok, frame = cap.read()
+    cap.release()
+    cv2.destroyAllWindows()
+
+    if not ok or frame is None:
+        print("[error] failed to read frame")
+        return
+
+    prompt = "Give bounding box coordinates of the person in the frame."
+    payload = {"image_b64": encode_b64(frame, q=80), "prompt": prompt}
+
+    t0 = time.perf_counter()
+    try:
+        resp = session.post(VLM_URL, json=payload, timeout=VLM_TIMEOUT_S)
+        resp.raise_for_status()
+        dt_ms = (time.perf_counter() - t0) * 1000.0
+        j = resp.json()
+        raw = (j.get("caption") or j.get("text") or resp.text).strip()
+        print(f"[oneshot] latency: {dt_ms:.1f} ms")
+        print(f"[oneshot] reply: {raw}")
+    except Exception as e:
+        dt_ms = (time.perf_counter() - t0) * 1000.0
+        print(f"[oneshot] failed after {dt_ms:.1f} ms: {e}")
+
 def run_identity_mode(session):
     ref_crop = startup_reference(session)
     if ref_crop is None:
@@ -602,6 +635,10 @@ def main():
         run_caption_mode(session)
     elif mode == "pointing":
         run_pointing_mode(session)
+    
+    elif mode == "oneshot":
+        run_oneshot_where_is_person(session)
+
     else:
         run_identity_mode(session)
 
